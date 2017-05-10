@@ -1,12 +1,25 @@
-# Simple backup tool
+# Basic backup tool
+
+## Features
+
+Can save some directories on a given interval. The save is just a .tar sent over
+ssh to your remote server with the name 'folder_DATE.tar.gz'.
+If a backup fails, an email is sent.
+
+This is designed to save some files from an eventual ransomware.
+The backup directory should obviously not be accessible from your shared folders.
 
 ## Needed
 
 You'll need tar and scp, and an internet connection
 
+## Installation
+
+Use a scheduler to run this once per day
+
 ## Configuration
 
-- Uses save.json to setup the folders to save
+### Uses save.json to setup the folders to save
 
  * *directory* : path to the folder to save
  * *period*    : frequency to save year/month/week/day
@@ -29,7 +42,7 @@ You'll need tar and scp, and an internet connection
 }
 ```
 
-- config.json to setup the backup machine (ssh)
+### config.json to setup the backup machine (ssh)
 
  * *ssh-host* : ssh hostname (see your ~/.ssh/config)
  * *remote-dir* : remote directory to save in

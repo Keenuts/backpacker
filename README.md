@@ -41,7 +41,7 @@ You'll need tar and scp, and an internet connection
 ```json
 {
     "ssh-host":"host",
-    "remote-dir":"~"
+    "remote-dir":"~",
     "save-to-keep":3,
 
     "mail-smtp":"smtp.test.com",

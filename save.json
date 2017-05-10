@@ -1,0 +1,14 @@
+{
+    "tasks": [
+        {
+            "directory": "save_a",
+            "period": "month",
+            "last_save": "2017-05-10"
+        },
+        {
+            "directory": "save_b",
+            "period": "day",
+            "last_save": "2017-05-10"
+        }
+    ]
+}

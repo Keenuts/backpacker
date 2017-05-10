@@ -8,10 +8,8 @@ import subprocess
 import smtplib    
 from email.mime.text import MIMEText
 
-MAIL_FROM='from@test.test'
-MAIL_TO='to@test.test'
-MAIL_SMTP='smtp.test.com'
 MAIL_OBJ='[NAS] Backup failed'
+MAIL_BODY='Sample body'
 LOG_PATH="./"
 
 logging.basicConfig(filename=LOG_PATH+'LOGS',
@@ -44,35 +42,30 @@ def get_date(data):
         return datetime.datetime.strptime("1970", "%Y");
     return datetime.datetime.strptime(data, "%Y-%m-%d");
 
-def save(config, directory, date, process):
-    logging.info("Saving the directory: %s" % directory);
-    filename = directory + "_" + date + ".tar.gz"
-    subprocess.call(["tar", "-cf", "/tmp/" + filename, directory + "/"]);
-    args = filename, subprocess.Popen(['scp', "/tmp/" + filename, config['ssh-host']+ ":"])
-    process.append(args)
+def save(config, filename, src, dst):
+    logging.info("Saving the directory: %s" % src);
+    subprocess.call(["tar", "-cf", "/tmp/" + src, filename]);
+    return subprocess.Popen(['scp', "/tmp/" + src, dst])
    
 def load_config():
     try:
         f = open("config.json", "r");
         config = json.loads(f.read());
         f.close();
-
-        if not "ssh-host" in config:
-            return False;
-        if not "save-to-keep" in config:
-            return False;
         return config;
-
     except json.decoder.JSONDecodeError as err:
         logging.error("Unable to parse config: %s" % str(err));
+    except:
+        logging.error("Missing fields in the config file.");
+    return False
 
-def send_email():
+def send_email(config):
     msg = MIMEText(MAIL_BODY);
     msg['Subject'] = MAIL_OBJ
-    msg['From'] = MAIL_FROM
-    msg['To'] = MAIL_TO
+    msg['From'] = config['mail-from']
+    msg['To'] = config['mail-to']
     try:
-        s = smtplib.SMTP(MAIL_SMTP)
+        s = smtplib.SMTP(config['mail-smtp'])
         s.sendmail(msg['From'], msg['To'], msg.as_string());
         s.quit();
     except:
@@ -84,12 +77,15 @@ def process():
     if config == False:
         return False;
     try:
+        processes = []
+        today = datetime.datetime.now();
+
         f = open("save.json", "r");
         data = json.loads(f.read());
         f.close();
-        processes = []
 
-        for t in data["tasks"]:
+        for i in range(0, len(data['tasks'])):
+            t = data['tasks'][i]
             if not check_valid(t):
                 return False;
 
@@ -97,38 +93,43 @@ def process():
             directory = t["directory"]
             period = t["period"]
 
-            today = datetime.datetime.now();
             delta = today - last_save;
 
-            if (
-                (period == 'year' and delta.week >= 365) or
+            if  ((period == 'year' and delta.week >= 365) or
                 (period == 'month' and delta.days >= 30) or
                 (period == 'week' and delta.days >= 7) or
-                (period == 'day' and delta.days >= 1)
-                ):
-                save(config, directory, today.strftime("%Y-%m-%d"), processes);
-                last_save = today
-            t['last_save'] = last_save.strftime('%Y-%m-%d')
+                (period == 'day' and delta.days >= 1)):
+
+
+                src=directory + ".tar.gz"
+                filename=directory + "_" + today.strftime("%Y-%m-%d") + ".tar.gz"
+                dst=config['ssh-host'] + ":" + config['remote-dir'] + "/" + filename
+
+                proc = save(config, directory, src, dst);
+                processes.append((proc, i, src, dst)); 
 
         error = False
         for p in processes:
-            print("Waiting for the file: " + p[0])
-            p[1].wait()
-            if p[1].returncode != 0:
-                logging.error("Unable to transfer the file %s" % p[0]);
+            print("Waiting for the file: " + p[2])
+            p[0].wait()
+            if p[0].returncode != 0:
+                logging.error("Unable to copy %s to %s", p[2], p[3]);
                 error = True
+            else:
+                data['tasks'][p[1]]['last_save'] = today.strftime("%Y-%m-%d")
 
         f = open("save.json", "w+");
         f.write(json.dumps(data, indent=4));
         f.close();
-        return error == True
+
+        if error:
+            send_email(config);
+        logging.info("Backup done.")
+        return error != True;
 
     except json.decoder.JSONDecodeError as err:
         logging.error("Unable to parse save file: %s" % str(err));
         return False
     return True
 
-if process() != 0:
-    send_email();
-
-logging.info("Backup done.")
+exit(process())

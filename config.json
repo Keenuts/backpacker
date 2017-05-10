@@ -1,4 +1,9 @@
 {
     "ssh-host":"Cassian",
-    "save-to-keep":3
+    "remote-dir":"~",
+    "save-to-keep":3,
+
+    "mail-smtp":"localhost",
+    "mail-from":"nas@test.org",
+    "mail-to":"me@test.org"
 }

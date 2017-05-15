@@ -44,12 +44,13 @@ Use a scheduler to run this once per day
 
 ### config.json to setup the backup machine (ssh)
 
- * *ssh-host* : ssh hostname (see your ~/.ssh/config)
- * *remote-dir* : remote directory to save in
- * *save-to-keep*    : not used for now
+ * *ssh-host*     : ssh hostname (see your ~/.ssh/config)
+ * *remote-dir*   : remote directory to save in
+ * *save-to-keep* : not used for now
  * *mail-smtp*    : smtp to use
  * *mail-from*    : from email
- * *mail-to*    : address to send the alert to
+ * *mail-to*      : address to send the alert to
+ * *debug*        : disable modifications on save.json
 
 ```json
 {

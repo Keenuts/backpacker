@@ -1,11 +1,14 @@
 #!/bin/python3
 
-import sys
-import json
 import datetime
+import json
 import logging
-import subprocess
+import os
 import smtplib    
+import subprocess
+import sys
+
+from multiprocessing.pool import ThreadPool
 from email.mime.text import MIMEText
 
 MAIL_OBJ='[NAS] Backup failed'
@@ -17,6 +20,21 @@ logging.basicConfig(filename=LOG_PATH+'LOGS',
                     datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.INFO);
 logging.info("Starting backup.")
+
+
+def worker(src, dst):
+    logging.info("Saving the directory: %s" % src)
+    if subprocess.call(["tar", "-cf", src + ".tar.gz", src]):
+        logging.error("Unable compress %s" % src)
+        return 1
+    if subprocess.call(['scp', src + ".tar.gz", dst]):
+        logging.error("Unable to send %s" % src)
+        return 1
+    if subprocess.call(["rm", "-f", src + ".tar.gz"]):
+        logging.error("Unable cleanup")
+        return 1
+    return 0
+
 
 def check_valid(t):
     if not "directory" in t:
@@ -41,11 +59,6 @@ def get_date(data):
     if data == "unknown":
         return datetime.datetime.strptime("1970", "%Y");
     return datetime.datetime.strptime(data, "%Y-%m-%d");
-
-def save(config, filename, src, dst):
-    logging.info("Saving the directory: %s" % src);
-    subprocess.call(["tar", "-cf", "/tmp/" + src, filename]);
-    return subprocess.Popen(['scp', "/tmp/" + src, dst])
    
 def load_config():
     try:
@@ -73,11 +86,12 @@ def send_email(config):
 
 
 def process():
+    pool = ThreadPool(4)
     config = load_config()
     if config == False:
         return False;
     try:
-        processes = []
+        threads = []
         today = datetime.datetime.now();
 
         f = open("save.json", "r");
@@ -90,7 +104,8 @@ def process():
                 return False;
 
             last_save = get_date(t["last_save"]);
-            directory = t["directory"]
+            element = os.path.basename(t["directory"])
+            path = os.path.dirname(t["directory"])
             period = t["period"]
 
             delta = today - last_save;
@@ -101,30 +116,30 @@ def process():
                 (period == 'day' and delta.days >= 1)):
 
 
-                src=directory + ".tar.gz"
-                filename=directory + "_" + today.strftime("%Y-%m-%d") + ".tar.gz"
-                dst=config['ssh-host'] + ":" + config['remote-dir'] + "/" + filename
+                dst_file=element + "_" + today.strftime("%Y-%m-%d") + ".tar.gz"
+                src=path + "/" + element
+                dst=config['ssh-host'] + ":" + config['remote-dir'] + "/" + dst_file
 
-                proc = save(config, directory, src, dst);
-                processes.append((proc, i, src, dst)); 
+                res = pool.apply_async(worker, (src, dst))
+                threads.append((res, i, src, dst))
 
         error = False
-        for p in processes:
+        for p in threads:
             print("Waiting for the file: " + p[2])
-            p[0].wait()
-            if p[0].returncode != 0:
-                logging.error("Unable to copy %s to %s", p[2], p[3]);
+            ret = p[0].get()
+            if ret != 0:
+                logging.error("Unable to copy %s to %s", p[2], p[3])
                 error = True
-            else:
+            elif not config['debug']:
                 data['tasks'][p[1]]['last_save'] = today.strftime("%Y-%m-%d")
 
-        f = open("save.json", "w+");
-        f.write(json.dumps(data, indent=4));
+        f = open("save.json", "w+")
+        f.write(json.dumps(data, indent=4))
         f.close();
 
         if error:
             send_email(config);
-        logging.info("Backup done.")
+        logging.info("Backup done.\n")
         return error != True;
 
     except json.decoder.JSONDecodeError as err:
